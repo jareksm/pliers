@@ -1,0 +1,21 @@
+---
+backup:
+  provider: aws
+  type: t2.micro
+  subnet: sub-aibv7ad9
+  image: ami-adf8g6h3
+  tags:
+    Environment: Env1
+    Name: backup
+  volumes:
+    /dev/sda: 20
+
+ns1:
+  provider: gcp
+  type: f1-micro
+  subnet: somesubnet
+  ip: 10.10.10.2
+  image: someimage
+  tags:
+    Environment: DMZ
+    Name: ns1
