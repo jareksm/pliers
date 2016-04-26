@@ -1,15 +1,21 @@
 package main
 
 import (
-        "fmt"
-        "log"
-//        "io/ioutil"
-//        "gopkg.in/yaml.v2"
-//        "flag"
-        "github.com/codegangsta/cli"
-        "os"
-        "sync"
+    "fmt"
+    "log"
+    "io/ioutil"
+    "gopkg.in/yaml.v2"
+//    "flag"
+    "github.com/codegangsta/cli"
+    "github.com/aws/aws-sdk-go/aws"
+    "github.com/aws/aws-sdk-go/aws/session"
+    "github.com/aws/aws-sdk-go/service/ec2"
+    "os"
+    "sync"
 )
+
+
+// Types
 
 // Instance definition type
 type Instance struct {
@@ -22,8 +28,18 @@ type Instance struct {
     Volumes map[string]int `yaml:"volumes,omitempty"`
 }
 
+// Global variables
+
 var file string
 var w sync.WaitGroup
+var data map[interface{}]Instance
+
+
+
+func createAWSSession() *ec2.EC2 {
+    svc := ec2.New(session.New(), &aws.Config{Region: aws.String("ap-southeast-2")})
+    return svc
+}
 
 func dieIf(message string, err error)  {
     if err != nil {
@@ -31,9 +47,50 @@ func dieIf(message string, err error)  {
     }
 }
 
-func build(vm string) {
-    log.Println("Building ", vm)
+
+// TODO: clean up this mess
+func buildInAWS(i Instance) {
+    //log.Println("Building ", i)
+    svc := createAWSSession()
+    runResult, err := svc.RunInstances(&ec2.RunInstancesInput{
+    // An Amazon Linux AMI ID for t2.micro instances in the us-west-2 region
+        ImageId:      aws.String(i.Image),
+        InstanceType: aws.String(i.Type),
+        MinCount:     aws.Int64(1),
+        MaxCount:     aws.Int64(1),
+        NetworkInterfaces:  []*ec2.InstanceNetworkInterfaceSpecification{
+            {
+                DeviceIndex: aws.Int64(0),
+                SubnetId: aws.String(i.Subnet),
+            },
+        },
+    })
+    if err != nil {
+        log.Println("Could not create instance", err)
+    } else {
+        log.Println("Created instance", *runResult.Instances[0].InstanceId)
+    }
+
     w.Done()
+}
+
+func buildThem(vms []string) {
+    for _, vmName := range(vms) {
+        instance, ok := data[vmName]
+        if ok {
+            log.Println("Building", vmName, "... Provider is", instance.Provider)
+            switch instance.Provider {
+            case "aws":
+                w.Add(1)
+                go buildInAWS(instance)
+            default:
+                log.Println("Not sure how to build in", instance.Provider, "... Skipping.")
+            }
+        } else {
+            log.Println(vmName, "is not defined. Skipping.")
+        }
+    }
+    w.Wait()
 }
 
 func main() {
@@ -59,12 +116,7 @@ func main() {
 
 			Action: func(c *cli.Context) {
                 if c.NArg() > 0 {
-                    vms := c.Args()
-                    w.Add(c.NArg())
-                    for _, vm := range(vms) {
-                        go build(vm)
-                    }
-                    w.Wait()
+                    buildThem(c.Args())
                 } else {
                     fmt.Println("Not enough arguments")
                     os.Exit(1)
@@ -80,20 +132,15 @@ func main() {
 */
 		},
     }
-    app.Run(os.Args)
-/*    m := make(map[interface{}]Instance)
-    data, err := ioutil.ReadFile("environment.yaml")
+
+    data = make(map[interface{}]Instance)
+    d, err := ioutil.ReadFile("environment.yaml")
     dieIf("Could not open config file", err)
 
-    err = yaml.Unmarshal([]byte(data), &m)
+    err = yaml.Unmarshal([]byte(d), &data)
     if err != nil {
         log.Fatalf("error: %v", err)
     }
-    fmt.Printf("--- m:\n%v\n\n", m)
-    d, err := yaml.Marshal(&m)
-    if err != nil {
-        log.Fatalf("error: %v", err)
-    }
-    fmt.Printf("--- m dump:\n%s\n\n", string(d))
-*/
+    app.Run(os.Args)
+
 }

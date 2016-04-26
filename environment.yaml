@@ -2,8 +2,8 @@
 backup:
   provider: aws
   type: t2.micro
-  subnet: sub-aibv7ad9
-  image: ami-adf8g6h3
+  subnet: subnet-2bf1304e
+  image: ami-6c14310f
   tags:
     Environment: Env1
     Name: backup
