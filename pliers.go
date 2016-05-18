@@ -29,11 +29,13 @@ type Instance struct {
 	Volumes  map[string]int    `yaml:"volumes,omitempty"`
 }
 
+type dataMap map[string]Instance
+
 // Global variables
 
 var file string
 var w sync.WaitGroup
-var data map[interface{}]Instance
+var data dataMap
 
 func createAWSSession() *ec2.EC2 {
 	svc := ec2.New(session.New(), &aws.Config{Region: aws.String("ap-southeast-2")})
@@ -131,7 +133,7 @@ func main() {
 		},
 	}
 
-	data = make(map[interface{}]Instance)
+	data = make(dataMap)
 	d, err := ioutil.ReadFile("environment.yaml")
 	dieIf("Could not open config file", err)
 
